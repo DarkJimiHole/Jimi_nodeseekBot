@@ -1,0 +1,21 @@
+services:
+  nodeseeker:
+    image: ghcr.io/darkjimihole/jimi_nodeseekbot:latest
+    restart: unless-stopped
+    ports:
+      - "3010:3010"
+    environment:
+      NODE_ENV: production
+      PORT: "3010"
+      HOST: 0.0.0.0
+      DATABASE_PATH: /usr/src/app/data/nodeseeker.db
+    volumes:
+      - nodeseeker_data:/usr/src/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  nodeseeker_data:

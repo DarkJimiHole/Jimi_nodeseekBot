@@ -1,3 +1,4 @@
+FROM cloudflare/cloudflared:2026.9.3 AS cloudflared
 # 使用官方 Bun 镜像作为基础镜像
 FROM oven/bun:1 AS base
 WORKDIR /usr/src/app
@@ -34,6 +35,7 @@ RUN bun run build
 
 # 生产阶段
 FROM base AS release
+COPY --from=cloudflared /usr/local/bin/cloudflared /usr/local/bin/cloudflared
 
 # 创建目录
 RUN mkdir -p /usr/src/app/data /usr/src/app/logs
@@ -59,4 +61,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:3010/health || exit 1
 
 # 启动应用
-ENTRYPOINT [ "bun", "run", "start" ]
+ENTRYPOINT [ "bun", "run", "dist/server.js" ]

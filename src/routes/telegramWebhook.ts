@@ -37,6 +37,19 @@ const clearSettingsSchema = z.object({
 // 单例 polling 服务（需要保持长连接状态）
 let pollingService: TelegramWebhookService | null = null;
 
+export async function restartTelegramAfterRestore(dbService: DatabaseService): Promise<void> {
+  if (pollingService) {
+    await pollingService.stopPolling();
+    pollingService = null;
+  }
+  const config = dbService.getBaseConfig();
+  if (config?.telegram_mode === 'polling' && config.bot_token) {
+    pollingService = new TelegramWebhookService(dbService, config.bot_token);
+    const result = await pollingService.startPolling();
+    if (!result.success) throw new Error('Telegram 重连失败');
+  }
+}
+
 // 容器重启后恢复已保存的交互模式，使私聊管理继续工作。
 export async function restoreTelegramPolling(dbService: DatabaseService): Promise<void> {
   const config = dbService.getBaseConfig();

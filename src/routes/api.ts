@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { managementRoutes } from './management';
 import { z } from 'zod';
 import { DatabaseService } from '../services/database';
 import { AuthService } from '../services/auth';
@@ -169,6 +170,7 @@ const sessionMiddleware = async (c: any, next: any) => {
 
 // 应用Session中间件到所有后续API路由
 apiRoutes.use('*', sessionMiddleware);
+apiRoutes.route('/management', managementRoutes);
 
 // 获取基础配置
 apiRoutes.get('/config', async (c) => {

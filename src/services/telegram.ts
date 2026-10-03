@@ -1,3 +1,4 @@
+import { registerTemporaryCommands, addSubscription, replyPlain } from './telegram/management';
 import { Bot, Context } from 'grammy';
 import { DatabaseService } from './database';
 import { logger } from '../utils/logger';
@@ -95,6 +96,7 @@ export class TelegramService {
       if (ctx.chat?.type === 'private') await next();
     });
     // 处理 /start 命令（特殊处理，不需要权限验证）
+    registerTemporaryCommands(this.bot, this.dbService);
     this.bot.command('start', async (ctx) => {
       await this.handleStartCommand(ctx);
     });
@@ -331,6 +333,9 @@ export class TelegramService {
       const commands = [
         { command: 'start', description: '查看管理权限和使用说明' },
         { command: 'help', description: '查看帮助信息' },
+        { command: 'web', description: '开启临时网页管理' },
+        { command: 'web_close', description: '关闭我的临时访问' },
+        { command: 'web_close_all', description: '关闭所有临时访问' },
         { command: 'getme', description: '查看自己的用户 ID 和管理权限' },
         { command: 'list', description: '查看订阅列表' },
         { command: 'add', description: '添加订阅 (用法: /add 关键词1 关键词2)' },
@@ -416,37 +421,14 @@ export class TelegramService {
 
     text += '💡 使用 /del 订阅ID 删除订阅';
 
-    await ctx.reply(text, { parse_mode: 'Markdown' });
+    await replyPlain(ctx, text);
   }
 
   /**
    * 处理 /add 命令
    */
   private async handleAddCommand(ctx: Context): Promise<void> {
-    const args = ctx.message?.text?.split(' ').slice(1) || [];
-
-    if (args.length === 0) {
-      await ctx.reply('❌ 请提供关键词。\n**用法：** /add 关键词1 关键词2 关键词3', { parse_mode: 'Markdown' });
-      return;
-    }
-
-    const keywords = args.slice(0, 3); // 最多3个关键词
-
-    try {
-      const sub = this.dbService.createKeywordSub({
-        keyword1: keywords[0],
-        keyword2: keywords[1] || undefined,
-        keyword3: keywords[2] || undefined
-      });
-
-      let text = `✅ **订阅添加成功！**\n\n**ID:** ${sub.id}\n**关键词：** ${sub.keyword1}`;
-      if (sub.keyword2) text += ` \\+ ${sub.keyword2}`;
-      if (sub.keyword3) text += ` \\+ ${sub.keyword3}`;
-
-      await ctx.reply(text, { parse_mode: 'Markdown' });
-    } catch (error) {
-      await ctx.reply(`❌ 添加订阅失败：${error}`);
-    }
+    await addSubscription(ctx, this.dbService);
   }
 
   /**
@@ -513,6 +495,9 @@ export class TelegramService {
 /resume - 恢复帖子推送
 /unbind - 仅移除自己的管理权限
 /help - 显示帮助
+/web - 开启临时网页管理
+/web_close - 关闭我的临时访问
+/web_close_all - 关闭所有临时访问
 
 管理员由网页端「管理员用户 ID」指定，只能在私聊中管理。
 所有管理员共同管理同一套订阅和推送设置。

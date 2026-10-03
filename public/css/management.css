@@ -1,0 +1,13 @@
+.management-card { border: 1px solid var(--border-color, #dce3eb); border-radius: 12px; padding: 18px; margin-bottom: 22px; }
+.management-card h4, .management-card summary { font-size: 16px; font-weight: 650; margin: 0 0 12px; }
+.management-card summary { cursor: pointer; }
+.management-card .form-label { display: block; margin: 16px 0 6px; }
+.management-card .input-field { width: 100%; box-sizing: border-box; }
+.management-card textarea { resize: vertical; }
+.management-card .form-hint { display: block; line-height: 1.7; margin: 10px 0 16px; }
+.management-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.management-message { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; margin: 12px 0; }
+.management-sensitive { padding: 12px; border-radius: 8px; background: #fff3d6; color: #754b06; line-height: 1.7; font-size: 13px; }
+.regex-output { font-family: ui-monospace, monospace; }
+.temporary-banner { padding: 8px; text-align: center; background: #e8f3ff; color: #174c82; }
+.temporary-expired { padding: 15vh 24px; text-align: center; font: 18px system-ui; }

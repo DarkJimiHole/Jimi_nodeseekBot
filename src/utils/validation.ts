@@ -45,9 +45,9 @@ export const postSchema = z.object({
 
 // 关键词订阅验证 Schema
 export const keywordSubSchema = z.object({
-    keyword1: z.string().max(100, '关键词1不能超过100个字符').optional(),
-    keyword2: z.string().max(100, '关键词2不能超过100个字符').optional(),
-    keyword3: z.string().max(100, '关键词3不能超过100个字符').optional(),
+    keyword1: z.string().max(1000, '关键词1不能超过1000个字符').optional(),
+    keyword2: z.string().max(1000, '关键词2不能超过1000个字符').optional(),
+    keyword3: z.string().max(1000, '关键词3不能超过1000个字符').optional(),
     creator: z.string().max(100, '创建者不能超过100个字符').optional(),
     category: z.string().max(100, '分类不能超过100个字符').optional(),
 }).refine(
@@ -59,9 +59,9 @@ export const keywordSubSchema = z.object({
 
 // 关键词订阅更新验证 Schema
 export const keywordSubUpdateSchema = z.object({
-    keyword1: z.string().max(100).optional(),
-    keyword2: z.string().max(100).optional(),
-    keyword3: z.string().max(100).optional(),
+    keyword1: z.string().max(1000).optional(),
+    keyword2: z.string().max(1000).optional(),
+    keyword3: z.string().max(1000).optional(),
     creator: z.string().max(100).optional(),
     category: z.string().max(100).optional(),
 });

@@ -317,6 +317,21 @@ app.use('*', async (c, next) => {
 
 
 // 健康检查端点
+// These legacy management endpoints precede /api's session middleware.
+app.use('*', async (c, next) => {
+    const path = c.req.path;
+    const protectedPath = path.startsWith('/api/db/') || path.startsWith('/api/scheduler/')
+        || path === '/auth/sessions' || path === '/auth/logout-all'
+        || (path.startsWith('/telegram/') && path !== '/telegram/webhook');
+    if (protectedPath) {
+        const header = c.req.header('Authorization');
+        if (!header?.startsWith('Bearer ') || !(await c.get('authService').verifySession(header.slice(7))).valid) {
+            return c.json({ success: false, message: '请先登录' }, 401);
+        }
+    }
+    await next();
+});
+
 app.get('/health', (c) => {
   return c.json({
     status: 'healthy',

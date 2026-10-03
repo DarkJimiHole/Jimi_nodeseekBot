@@ -3,7 +3,7 @@ services:
     image: ghcr.io/darkjimihole/jimi_nodeseekbot:latest
     restart: unless-stopped
     ports:
-      - "3010:3010"
+      - "127.0.0.1:3010:3010"
     environment:
       NODE_ENV: production
       PORT: "3010"

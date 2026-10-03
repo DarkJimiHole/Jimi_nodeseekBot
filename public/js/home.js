@@ -3,6 +3,7 @@
 // ============================================
 
 document.addEventListener("DOMContentLoaded", function () {
+  document.addEventListener('subscriptions-changed', () => { loadSubscriptions(); loadFilterSubscriptions(); });
   const sessionId = localStorage.getItem("sessionId");
   const isLoggedIn = !!sessionId;
 
@@ -1133,7 +1134,7 @@ document.addEventListener("DOMContentLoaded", function () {
         </div>
         <div class="subscription-filters">
           ${sub.creator ? `<span class="tag">👤 ${escapeHtml(sub.creator)}</span>` : ""}
-          ${sub.category ? `<span class="tag">📂 ${getCategoryName(sub.category)}</span>` : ""}
+          ${sub.category ? `<span class="tag">📂 ${escapeHtml(getCategoryName(sub.category))}</span>` : ""}
         </div>
         <button class="btn btn-danger btn-xs delete-sub-btn" data-id="${sub.id}">
           删除

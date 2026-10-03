@@ -3,9 +3,9 @@
  * 提供离线缓存和后台同步功能
  */
 
-const CACHE_NAME = 'nodeseeker-v2';
-const STATIC_CACHE = 'nodeseeker-static-v2';
-const DYNAMIC_CACHE = 'nodeseeker-dynamic-v2';
+const CACHE_NAME = 'nodeseeker-v3';
+const STATIC_CACHE = 'nodeseeker-static-v3';
+const DYNAMIC_CACHE = 'nodeseeker-dynamic-v3';
 
 // 预缓存的核心静态资源
 const STATIC_ASSETS = [
@@ -21,8 +21,7 @@ const STATIC_ASSETS = [
     '/css/toast.css',
     '/js/init.js',
     '/js/home.js',
-    '/icons/icon-192x192.png',
-    '/icons/icon-512x512.png',
+    '/icons/pwa-icon-512x512.png',
     '/favicon.svg'
 ];
 
@@ -44,6 +43,10 @@ self.addEventListener('install', (event) => {
                 console.error('[SW] 预缓存失败:', error);
             })
     );
+});
+
+self.addEventListener('message', event => {
+    if (event.data?.action === 'skipWaiting') self.skipWaiting();
 });
 
 // 激活事件：清理旧缓存
@@ -151,8 +154,8 @@ function getStrategy(request) {
     const url = new URL(request.url);
 
     // API 请求使用网络优先
-    if (url.pathname.startsWith('/api/')) {
-        return networkFirst;
+    if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/') || url.pathname.startsWith('/_temporary')) {
+        return networkOnly;
     }
 
     // 静态资源使用缓存优先

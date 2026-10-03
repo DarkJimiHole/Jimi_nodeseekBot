@@ -1,4 +1,12 @@
 // 基础配置接口
+export interface TemporaryAccessConfig {
+  enabled: number;
+  mode: 'quick' | 'named';
+  public_url: string;
+  tunnel_token: string;
+  duration_minutes: number;
+}
+
 export interface BaseConfig {
   id?: number;
   username: string;

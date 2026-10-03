@@ -1,5 +1,6 @@
 import type { FC } from "hono/jsx";
 import { Layout } from "./Layout";
+import { RegexGenerator, ManagementTools } from './ManagementTools';
 
 export const HomePage: FC = () => {
   return (
@@ -47,6 +48,7 @@ export const HomePage: FC = () => {
                 <button class="dropdown-item" data-drawer="telegram">
                   <span>🤖</span> Telegram
                 </button>
+                <button class="dropdown-item" data-drawer="management"><span>🔐</span> 临时访问与备份</button>
                 <div class="dropdown-divider"></div>
                 <button class="dropdown-item text-danger" id="logoutBtn">
                   <span>🚪</span> 退出登录
@@ -198,6 +200,7 @@ export const HomePage: FC = () => {
           </button>
         </div>
         <div class="drawer-content">
+          <RegexGenerator />
           {/* 添加订阅表单 */}
           <form id="addSubForm" class="sub-form">
             {/* 第一行：关键词 */}
@@ -543,6 +546,9 @@ export const HomePage: FC = () => {
         </div>
       </div>
 
+      <ManagementTools />
+      <link href="/css/management.css" rel="stylesheet" />
+      <script src="/js/management.js" defer></script>
       {/* Toast 容器 */}
       <div id="toastContainer" class="toast-container"></div>
     </Layout>

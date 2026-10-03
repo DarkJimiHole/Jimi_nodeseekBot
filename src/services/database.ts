@@ -1,9 +1,11 @@
 import type { Database } from 'bun:sqlite';
 import { createDatabaseConnection } from '../config/database';
-import type { BaseConfig, Post, KeywordSub } from '../types';
+import type { BaseConfig, Post, KeywordSub, TemporaryAccessConfig } from '../types';
 import { logger } from '../utils/logger';
 
 export class DatabaseService {
+  private static cacheVersion = 0;
+  private cacheVersion = 0;
   private queryCache: Map<string, { data: any; timestamp: number; ttl: number }>;
   private readonly CACHE_TTL = 60000; // 1分钟缓存
 
@@ -23,6 +25,10 @@ export class DatabaseService {
   }
 
   private getFromCache<T>(key: string): T | null {
+    if (this.cacheVersion !== DatabaseService.cacheVersion) {
+      this.queryCache.clear();
+      this.cacheVersion = DatabaseService.cacheVersion;
+    }
     const cached = this.queryCache.get(key);
     if (cached && Date.now() - cached.timestamp < cached.ttl) {
       return cached.data as T;
@@ -40,6 +46,7 @@ export class DatabaseService {
   }
 
   private clearCacheByPattern(pattern: string): void {
+    DatabaseService.cacheVersion++;
     const keysToDelete: string[] = [];
     this.queryCache.forEach((_, key) => {
       if (key.includes(pattern)) {
@@ -76,6 +83,27 @@ export class DatabaseService {
   }
 
   // 基础配置相关操作
+  getTemporaryAccessConfig(): TemporaryAccessConfig {
+    return this.db.query('SELECT * FROM temporary_access_config WHERE id = 1').get() as TemporaryAccessConfig;
+  }
+
+  saveTemporaryAccessConfig(config: { enabled: boolean; mode: string; public_url: string; tunnel_token: string; duration_minutes: number }): void {
+    this.db.query('UPDATE temporary_access_config SET enabled = ?, mode = ?, public_url = ?, tunnel_token = ?, duration_minutes = ? WHERE id = 1')
+      .run(Number(config.enabled), config.mode, config.public_url, config.tunnel_token, config.duration_minutes);
+  }
+
+  restoreConfiguration(subscriptions: Array<Omit<KeywordSub, 'id'>>, config: Partial<BaseConfig>): void {
+    this.db.transaction(() => {
+      if (!this.getBaseConfig()) throw new Error('请先初始化系统');
+      // 不复用旧 ID，避免历史文章被关联到不相干的新订阅。
+      this.db.query('UPDATE posts SET sub_id = NULL WHERE sub_id IS NOT NULL').run();
+      this.db.query('DELETE FROM keywords_sub').run();
+      for (const sub of subscriptions) this.createKeywordSub(sub);
+      this.updateBaseConfig(config);
+    })();
+    this.clearCacheByPattern('');
+  }
+
   getBaseConfig(): BaseConfig | null {
     // Polling 与网页请求使用不同的连接，直接读取确保撤销权限立即生效。
     return this.db.query('SELECT * FROM base_config LIMIT 1').get() as BaseConfig | null;

@@ -4,6 +4,7 @@ import { DatabaseService } from './services/database';
 import { SchedulerService } from './services/scheduler';
 import { logger } from './utils/logger';
 import { restoreTelegramPolling } from './routes/telegramWebhook';
+import { initializeTemporaryAccess, getTemporaryAccess } from './services/temporary-access';
 
 export let schedulerService: SchedulerService | null = null;
 
@@ -12,6 +13,7 @@ async function main() {
     try {
         // 初始化应用和数据库
         const config = await startServer();
+        initializeTemporaryAccess(request => app.fetch(request));
 
         // 创建定时任务服务
         const dbService = DatabaseService.create();
@@ -24,7 +26,13 @@ async function main() {
         const server = Bun.serve({
             port: config!.PORT,
             hostname: config!.HOST,
-            fetch: app.fetch,
+            fetch: request => {
+                // A CF route accidentally targeting 3010 must not bypass the temporary gateway.
+                if (request.headers.has('cf-ray') || request.headers.has('cf-connecting-ip')) {
+                    return new Response('CF 临时隧道的服务地址必须指向 http://127.0.0.1:3011', { status: 403 });
+                }
+                return app.fetch(request);
+            },
         });
 
         logger.server(`服务器运行在: http://${server.hostname}:${server.port}`);
@@ -46,6 +54,7 @@ async function main() {
 
 // 优雅关闭
 function gracefulShutdown() {
+    getTemporaryAccess().closeAll();
     logger.warn('收到关闭信号，正在优雅关闭...');
 
     if (schedulerService) {

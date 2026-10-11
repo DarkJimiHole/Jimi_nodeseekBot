@@ -1,7 +1,13 @@
 import { DatabaseService } from './database';
-import { TelegramPushService } from './telegram/push';
+import { TelegramPushService, isRateLimitError } from './telegram/push';
 import { logger } from '../utils/logger';
+import { parseRegexKeyword } from '../utils/keyword-regex';
 import type { Post, KeywordSub, BaseConfig, PushResult } from '../types';
+
+// 推送失败（状态 1）的文章在入库后多长时间内自动重试
+const RETRY_WINDOW_MINUTES = 120;
+// 两次推送之间的间隔，避免触发 Telegram 群组限流（每分钟约 20 条）
+const PUSH_INTERVAL_MS = 1000;
 
 export interface MatchResult {
   matched: boolean;
@@ -62,36 +68,10 @@ export class MatcherService {
   }
 
   /**
-   * 检测关键字是否为正则表达式格式
-   */
-  private isRegexKeyword(keyword: string): { isRegex: boolean; pattern?: string; flags?: string } {
-    if (!keyword || keyword.trim().length === 0) {
-      return { isRegex: false };
-    }
-
-    // 检测 /pattern/flags 格式（如 /pattern/i, /pattern/gi 等）
-    if (keyword.startsWith('/')) {
-      const lastSlashIndex = keyword.lastIndexOf('/');
-      if (lastSlashIndex > 0) {
-        const pattern = keyword.slice(1, lastSlashIndex);
-        const flags = keyword.slice(lastSlashIndex + 1);
-        return { isRegex: true, pattern, flags };
-      }
-    }
-
-    // 检测 regex: 前缀格式
-    if (keyword.toLowerCase().startsWith('regex:')) {
-      return { isRegex: true, pattern: keyword.slice(6), flags: 'i' };
-    }
-
-    return { isRegex: false };
-  }
-
-  /**
    * 执行匹配检查（字符串或正则）
    */
   private performMatch(text: string, keyword: string): boolean {
-    const regexInfo = this.isRegexKeyword(keyword);
+    const regexInfo = parseRegexKeyword(keyword);
 
     if (regexInfo.isRegex && regexInfo.pattern) {
       try {
@@ -141,10 +121,10 @@ export class MatcherService {
     const creatorText = post.creatorLower || post.creator.toLowerCase();
     const categoryText = post.categoryLower || post.category.toLowerCase();
 
-    // 检查作者精确匹配过滤（如果指定了creator，必须精确匹配）
+    // 检查作者精确匹配过滤（如果指定了creator，必须精确匹配，忽略大小写）
     if (subscription.creator && subscription.creator.trim().length > 0) {
       const targetCreator = subscription.creator.toLowerCase().trim();
-      if (!creatorText.includes(targetCreator)) {
+      if (creatorText.trim() !== targetCreator) {
         return {
           matched: false,
           matchedKeywords: [],
@@ -159,10 +139,10 @@ export class MatcherService {
       }
     }
 
-    // 检查分类精确匹配过滤（如果指定了category，必须精确匹配）
+    // 检查分类精确匹配过滤（如果指定了category，必须精确匹配，忽略大小写）
     if (subscription.category && subscription.category.trim().length > 0) {
       const targetCategory = subscription.category.toLowerCase().trim();
-      if (!categoryText.includes(targetCategory)) {
+      if (categoryText.trim() !== targetCategory) {
         return {
           matched: false,
           matchedKeywords: [],
@@ -300,7 +280,6 @@ export class MatcherService {
 
     const matchedUpdates: Array<{ postId: number; pushStatus: number; subId?: number }> = [];
     const unmatchedUpdates: Array<{ postId: number; pushStatus: number }> = [];
-    const matchedPostsForPush: Array<{ post: Post; subscription: KeywordSub }> = [];
 
     // 第一步：比对所有帖子和订阅，确定匹配状态
     for (const post of unpushedPosts) {
@@ -317,9 +296,6 @@ export class MatcherService {
             pushStatus: 1,
             subId: firstMatch.subscription?.id
           });
-          if (firstMatch.subscription) {
-            matchedPostsForPush.push({ post, subscription: firstMatch.subscription });
-          }
           result.pushed++;
         }
       } catch (error) {
@@ -338,29 +314,38 @@ export class MatcherService {
       }
     }
 
-    // 第三步：尝试推送 Telegram
+    // 第三步：尝试推送 Telegram（本轮新匹配的文章 + 近期推送失败的文章）
     if (config.stop_push === 1) {
       logger.match('推送已停止');
     } else if (this.telegramService && config.bot_token && config.chat_id) {
+      const subscriptionsById = new Map(subscriptions.map(sub => [sub.id, sub]));
+      const postsToPush = this.dbService.getRetryablePosts(RETRY_WINDOW_MINUTES);
       let pushSuccess = 0;
       let pushFail = 0;
 
-      for (const { post, subscription } of matchedPostsForPush) {
+      for (const post of postsToPush) {
+        const subscription = post.sub_id ? subscriptionsById.get(post.sub_id) : undefined;
+        if (!subscription) continue;
+
+        if (pushSuccess + pushFail > 0) {
+          await new Promise(resolve => setTimeout(resolve, PUSH_INTERVAL_MS));
+        }
+
         try {
           const success = await this.telegramService.pushPost(post, subscription);
           if (success) pushSuccess++;
           else pushFail++;
-
-          if (pushSuccess > 0 && pushSuccess % 5 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
         } catch (error) {
           pushFail++;
+          if (isRateLimitError(error)) {
+            logger.warn(`Telegram 限流（retry_after=${error.parameters.retry_after ?? '?'}s），剩余文章下一轮再推送`);
+            break;
+          }
           logger.error(`推送失败: ${post.title}`, error);
         }
       }
 
-      if (matchedPostsForPush.length > 0) {
+      if (pushSuccess + pushFail > 0) {
         logger.telegram(`推送: ${pushSuccess} 成功, ${pushFail} 失败`);
       }
     }

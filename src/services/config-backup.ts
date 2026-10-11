@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { keywordSubSchema } from '../utils/validation';
+import { storedKeywordSubSchema } from '../utils/validation';
 import { adminUserIdsSchema } from '../utils/telegram-admins';
 import type { DatabaseService } from './database';
 
@@ -8,7 +8,7 @@ export const backupSchema = z.object({
     format: z.literal('jimi-nodeseek-config'),
     version: z.literal(1),
     exportedAt: z.string().datetime(),
-    subscriptions: z.array(keywordSubSchema).max(5000),
+    subscriptions: z.array(storedKeywordSubSchema).max(5000),
     rss: z.object({
         rss_url: httpUrl,
         rss_interval_seconds: z.number().int().min(10).max(3600),

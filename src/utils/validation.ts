@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { adminUserIdsSchema } from './telegram-admins';
+import { isValidKeyword } from './keyword-regex';
 
 // 基础配置验证 Schema
 export const baseConfigSchema = z.object({
@@ -43,8 +44,14 @@ export const postSchema = z.object({
     push_date: z.string().optional(),
 });
 
-// 关键词订阅验证 Schema
-export const keywordSubSchema = z.object({
+// 关键词字段：正则格式（/pattern/flags 或 regex:pattern）必须能编译
+const keywordField = (label: string) => z.string()
+    .max(1000, `${label}不能超过1000个字符`)
+    .refine(isValidKeyword, `${label}正则表达式语法错误`)
+    .optional();
+
+// 已存储的关键词订阅 Schema（不校验正则，用于恢复历史备份）
+export const storedKeywordSubSchema = z.object({
     keyword1: z.string().max(1000, '关键词1不能超过1000个字符').optional(),
     keyword2: z.string().max(1000, '关键词2不能超过1000个字符').optional(),
     keyword3: z.string().max(1000, '关键词3不能超过1000个字符').optional(),
@@ -57,11 +64,25 @@ export const keywordSubSchema = z.object({
     }
 );
 
+// 关键词订阅验证 Schema
+export const keywordSubSchema = z.object({
+    keyword1: keywordField('关键词1'),
+    keyword2: keywordField('关键词2'),
+    keyword3: keywordField('关键词3'),
+    creator: z.string().max(100, '创建者不能超过100个字符').optional(),
+    category: z.string().max(100, '分类不能超过100个字符').optional(),
+}).refine(
+    (data) => data.keyword1 || data.keyword2 || data.keyword3 || data.creator || data.category,
+    {
+        message: '至少需要提供一个关键词或过滤条件',
+    }
+);
+
 // 关键词订阅更新验证 Schema
 export const keywordSubUpdateSchema = z.object({
-    keyword1: z.string().max(1000).optional(),
-    keyword2: z.string().max(1000).optional(),
-    keyword3: z.string().max(1000).optional(),
+    keyword1: keywordField('关键词1'),
+    keyword2: keywordField('关键词2'),
+    keyword3: keywordField('关键词3'),
     creator: z.string().max(100).optional(),
     category: z.string().max(100).optional(),
 });

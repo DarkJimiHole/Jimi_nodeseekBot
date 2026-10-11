@@ -9,6 +9,8 @@ export class SchedulerService {
     private rssIntervalId?: NodeJS.Timeout;
     private dbService: DatabaseService;
     private isRunning: boolean = false;
+    // 上一轮任务尚未结束时跳过本轮，避免并发抓取和写库
+    private isExecuting: boolean = false;
 
     constructor(dbService: DatabaseService) {
         this.dbService = dbService;
@@ -70,9 +72,23 @@ export class SchedulerService {
     }
 
     /**
-     * 执行 RSS 抓取和推送任务
+     * 执行 RSS 抓取和推送任务，返回 false 表示上一轮仍在执行、本轮已跳过
      */
-    private async executeRSSTask(): Promise<void> {
+    private async executeRSSTask(): Promise<boolean> {
+        if (this.isExecuting) {
+            logger.task.warn('上一轮 RSS 任务仍在执行，跳过本轮');
+            return false;
+        }
+        this.isExecuting = true;
+        try {
+            await this.runRSSTask();
+            return true;
+        } finally {
+            this.isExecuting = false;
+        }
+    }
+
+    private async runRSSTask(): Promise<void> {
         const startTime = Date.now();
         logger.task.start('RSS 任务');
 
@@ -91,20 +107,19 @@ export class SchedulerService {
                 logger.task.info(`新增文章: ${rssResult.new} 篇`);
             }
 
-            // 2. 匹配和推送
-            const unpushedCount = this.dbService.getPostsCountByStatus(0);
-            if (unpushedCount > 0) {
-                let telegramService: TelegramPushService | null = null;
-                if (config.bot_token) {
-                    try {
-                        telegramService = new TelegramPushService(this.dbService, config.bot_token);
-                    } catch (e) {
-                        logger.warn('Telegram 服务初始化失败，仅执行匹配');
-                    }
+            // 2. 匹配和推送（每轮都执行，以便重试近期推送失败的文章）
+            let telegramService: TelegramPushService | null = null;
+            if (config.bot_token) {
+                try {
+                    telegramService = new TelegramPushService(this.dbService, config.bot_token);
+                } catch (e) {
+                    logger.warn('Telegram 服务初始化失败，仅执行匹配');
                 }
-                const matcherService = new MatcherService(this.dbService, telegramService);
+            }
+            const matcherService = new MatcherService(this.dbService, telegramService);
 
-                const pushResult = await matcherService.processUnpushedPosts();
+            const pushResult = await matcherService.processUnpushedPosts();
+            if (pushResult.pushed + pushResult.skipped + pushResult.failed > 0) {
                 logger.task.info(`匹配: ${pushResult.pushed} | 未匹配: ${pushResult.skipped} | 失败: ${pushResult.failed}`);
             }
 
@@ -124,7 +139,10 @@ export class SchedulerService {
     async manualRSSTask(): Promise<{ success: boolean; message: string; data?: any }> {
         try {
             logger.scheduler('手动执行 RSS 任务');
-            await this.executeRSSTask();
+            const executed = await this.executeRSSTask();
+            if (!executed) {
+                return { success: false, message: 'RSS 任务正在执行中，请稍后再试' };
+            }
             return { success: true, message: 'RSS 任务执行成功' };
         } catch (error) {
             return { success: false, message: `RSS 任务执行失败: ${error}` };

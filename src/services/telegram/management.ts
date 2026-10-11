@@ -20,12 +20,6 @@ export async function addSubscription(ctx: Context, db: DatabaseService) {
     }
     let sub;
     try {
-        for (const token of tokens) {
-            if (token.startsWith('/') && token.lastIndexOf('/') > 0) {
-                const end = token.lastIndexOf('/');
-                new RegExp(token.slice(1, end), token.slice(end + 1) || 'i');
-            }
-        }
         sub = db.createKeywordSub(keywordSubSchema.parse({ keyword1: tokens[0], keyword2: tokens[1], keyword3: tokens[2] }));
     } catch {
         await ctx.reply('添加失败：请检查正则语法和长度（每个关键词最多 1000 字符）。');

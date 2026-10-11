@@ -1,6 +1,15 @@
+import { GrammyError } from 'grammy';
 import { TelegramBaseService } from './base';
 import type { Post, KeywordSub } from '../../types';
 import { logger } from '../../utils/logger';
+import { escapeHtml } from '../../utils/helpers';
+
+/**
+ * 是否为 Telegram 限流错误（429）
+ */
+export function isRateLimitError(error: unknown): error is GrammyError {
+  return error instanceof GrammyError && error.error_code === 429;
+}
 
 export class TelegramPushService extends TelegramBaseService {
   /**
@@ -18,58 +27,39 @@ export class TelegramPushService extends TelegramBaseService {
 
   /**
    * 推送文章到 Telegram
+   *
+   * 遇到 Telegram 限流（429）时抛出错误，由调用方中断本轮推送，其余失败返回 false
    */
   async pushPost(post: Post, matchedSub: KeywordSub): Promise<boolean> {
-    try {
-      const config = this.dbService.getBaseConfig();
-      if (!config || config.stop_push === 1) {
-        return false;
-      }
-
-      // 构建关键词字符串，用markdown格式的标签包裹
-      const keywords = [matchedSub.keyword1, matchedSub.keyword2, matchedSub.keyword3]
-        .filter(k => k && k.trim().length > 0)
-        .join(' ');
-
-      const keywordsStr = keywords ? `🎯 ${keywords}` : '';
-
-      const creator = matchedSub.creator ? `👤 ${matchedSub.creator}` : '';
-      const category = matchedSub.category ? `🗂️ ${this.getCategoryName(matchedSub.category)}` : '';
-
-      // 构建帖子链接
-      const postUrl = `https://www.nodeseek.com/post-${post.post_id}-1`;
-
-      // 去除 post.title 会影响markdown链接的符号
-      const title = post.title
-        .replace(/\[/g, "「")
-        .replace(/\]/g, "」")
-        .replace(/\(/g, "（")
-        .replace(/\)/g, "）");
-
-      const text = `
-**${keywordsStr} ${creator} ${category}**
-
-**[${title}](${postUrl})**
-      `;
-
-      const success = await this.sendMessage(config.chat_id, text);
-
-      if (success) {
-        // 更新推送状态为 3（已匹配且已推送成功）
-        this.dbService.updatePostPushStatus(
-          post.post_id,
-          3, // 已匹配且已推送成功
-          matchedSub.id,
-          new Date().toISOString()
-        );
-        return true;
-      }
-
+    const config = this.dbService.getBaseConfig();
+    if (!config || config.stop_push === 1) {
       return false;
+    }
+
+    // 构建帖子链接
+    const postUrl = `https://www.nodeseek.com/post-${post.post_id}-1`;
+
+    // 使用 HTML 模式，标题中的 _ * ` 等字符不会再导致解析失败
+    const text = `<b><a href="${escapeHtml(postUrl)}">${escapeHtml(post.title)}</a></b>`;
+
+    try {
+      await this.bot.api.sendMessage(config.chat_id, text, { parse_mode: 'HTML' });
     } catch (error) {
+      if (isRateLimitError(error)) {
+        throw error;
+      }
       logger.error('推送文章失败:', error);
       return false;
     }
+
+    // 更新推送状态为 3（已匹配且已推送成功）
+    this.dbService.updatePostPushStatus(
+      post.post_id,
+      3, // 已匹配且已推送成功
+      matchedSub.id,
+      new Date().toISOString()
+    );
+    return true;
   }
 
   /**

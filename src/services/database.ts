@@ -347,6 +347,21 @@ export class DatabaseService {
     return stmt.all() as Post[];
   }
 
+  /**
+   * 获取近期已匹配但推送失败、可重试的文章（状态 1）
+   */
+  getRetryablePosts(withinMinutes: number): Post[] {
+    const stmt = this.db.query(`
+      SELECT * FROM posts
+      WHERE push_status = 1
+        AND sub_id IS NOT NULL
+        AND created_at >= datetime('now', ?)
+      ORDER BY pub_date ASC
+    `);
+
+    return stmt.all(`-${withinMinutes} minutes`) as Post[];
+  }
+
   // 新增：带分页的文章查询（包含匹配的关键词信息）
   getPostsWithPagination(
     page: number = 1,
